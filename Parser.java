@@ -92,7 +92,7 @@ public class Parser {
                     String nextPart = parts[i + 1].trim();
                     if (isNumeric(nextPart)) {
                         double taskSize = Math.abs(Double.parseDouble(nextPart));
-                        if (isValidTaskType(taskType)) {
+                        if (isValidTaskType(taskType)&&taskSize>=0) {
                             taskTypeSizes.put(taskType, taskSize); // Store valid task type and size globally
                             taskTypeSet.add(taskType);
                         } else {
@@ -194,37 +194,38 @@ public class Parser {
                     for (int i = 1; i < jobParts.length; i++) {
                         String task = jobParts[i];
                         if (isValidTaskType(task)) {
-                            for(Task T : tasks){
-                                if (T.getTaskTypeID().equals(task)){
+                            for (Task T : tasks) {
+                                if (T.getTaskTypeID().equals(task)) {
                                     jobTasks.add(T);
                                 }
                             }
                         } else {
                             checker.add("Invalid task type in job " + jobId + ": " + task);
                         }
-
-
                     }
-                    if(jobs.isEmpty()){
-                            jobTypeID Job = new jobTypeID(jobId,jobTasks);
-                            jobs.add(Job);
-                    }
-                    if(!jobs.isEmpty()){
-                        for(jobTypeID job : jobs){
-                            if(!job.getJobTypeID().equals(jobId)){
-                                jobTypeID Job = new jobTypeID(jobId,jobTasks);
-                                jobs.add(Job);
-                            }
+
+                    boolean isDuplicate = false;
+                    for (jobTypeID job : jobs) {
+                        if (job.getJobTypeID().equals(jobId)) {
+                            checker.add("Duplicate Job: " + jobId);
+                            isDuplicate = true;
+                            break;
                         }
                     }
-
+                    if (!isDuplicate) {
+                        jobTypeID newJob = new jobTypeID(jobId, jobTasks);
+                        jobs.add(newJob);
+                    }
 
                 } else {
                     checker.add("Invalid job format: " + jobContent);
                 }
+
             }
+
         }
     }
+
 
     private boolean isValidTaskType(String taskType) {
         return taskType.matches("^T\\d+$");
@@ -233,23 +234,11 @@ public class Parser {
     private boolean isNumeric(String str) {
         return str.matches("-?\\d+(\\.\\d+)?");
     }
-
-    // Public method to get the errors from the SyntaxChecker
-    public List<String> getErrors() {
-        return checker.getErrors();
+    public void printErrors(){
+        checker.printErrors();
     }
 
-    // SyntaxChecker class for demonstration purposes
-    private class SyntaxChecker {
-        private final List<String> errors = new ArrayList<>();
 
-        public void add(String error) {
-            errors.add(error);
-        }
 
-        public List<String> getErrors() {
-            return errors;
-        }
-    }
 
 }
