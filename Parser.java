@@ -11,6 +11,7 @@ public class Parser {
     private final Map<String, String> jobTypes;
     private final ArrayList<Task> tasks = new ArrayList<>();
     private final ArrayList<jobTypeID> jobs = new ArrayList<>();
+    private final ArrayList<Station> Stations = new ArrayList<>();
 
     // Constructor
     public Parser(String workflowFile) {
@@ -20,15 +21,18 @@ public class Parser {
         stations = new HashMap<>();
         jobTypes = new HashMap<>();
         read(file);
-
     }
 
+    //to generate object ArrayLists:
     public ArrayList<Task> getTasks() {
         return tasks;
     }
 
     public ArrayList<jobTypeID> getJobs() {
         return jobs;
+    }
+    public ArrayList<Station> getStations(){
+        return Stations;
     }
 
     // Read the file
@@ -92,25 +96,37 @@ public class Parser {
                     String nextPart = parts[i + 1].trim();
                     if (isNumeric(nextPart)) {
                         double taskSize = Math.abs(Double.parseDouble(nextPart));
-                        if (isValidTaskType(taskType)&&taskSize>=0) {
-                            taskTypeSizes.put(taskType, taskSize); // Store valid task type and size globally
-                            taskTypeSet.add(taskType);
+                        if (isValidTaskType(taskType)) {
+                            if (taskTypeSizes.containsKey(taskType)) {
+                                checker.add("Duplicate task type: " + taskType);
+                            } else {
+                                taskTypeSizes.put(taskType, taskSize); // Store valid task type and size globally
+                                taskTypeSet.add(taskType);
+                            }
                         } else {
                             checker.add("Invalid task type: " + taskType);
                         }
                         i++;
                     } else {
                         if (isValidTaskType(taskType)) {
-                            taskTypeSizes.put(taskType, 1.0); // Default size 1.0 for valid task type
-                            taskTypeSet.add(taskType);
+                            if (taskTypeSizes.containsKey(taskType)) {
+                                checker.add("Duplicate task type: " + taskType);
+                            } else {
+                                taskTypeSizes.put(taskType, 1.0); // Default size: 1.0 for valid task type
+                                taskTypeSet.add(taskType);
+                            }
                         } else {
                             checker.add("Invalid task type: " + taskType);
                         }
                     }
                 } else {
                     if (isValidTaskType(taskType)) {
-                        taskTypeSizes.put(taskType, 1.0); // Default size for the last valid task type without a size
-                        taskTypeSet.add(taskType);
+                        if (taskTypeSizes.containsKey(taskType)) {
+                            checker.add("Duplicate task type: " + taskType);
+                        } else {
+                            taskTypeSizes.put(taskType, 1.0); // Default size for the last valid task type without a size
+                            taskTypeSet.add(taskType);
+                        }
                     } else {
                         checker.add("Invalid task type: " + taskType);
                     }
@@ -125,6 +141,7 @@ public class Parser {
         }
     }
 
+    //what I need: Arraylist<Task> stationTasks, ArrayList<TaskTypeReeders, then generate objects
     private void parseStations(String line, Scanner fileScanner) {
         StringBuilder stationsBuilder = new StringBuilder(line);
 
@@ -147,22 +164,32 @@ public class Parser {
 
         if (matcher.find()) {
             String content = matcher.group(1).trim();
-            String[] parts = content.split("\\s+");
+            Pattern stationPattern = Pattern.compile("\\(([^)]+)\\)");
+            Matcher stationMatcher = stationPattern.matcher(content);
+            System.out.println("Here"+content);
 
-            for (String part : parts) {
-                String[] stationParts = part.split(":");
-                if (stationParts.length == 2) {
+            while (stationMatcher.find()) {
+                String stationContent = stationMatcher.group(1).trim();
+                System.out.println(stationContent);
+                String[] stationParts = stationContent.split("\\s+");
+
+                if (stationParts.length >= 2) {
                     String stationName = stationParts[0].trim();
                     String stationLocation = stationParts[1].trim();
-                    stations.put(stationName, stationLocation);
+                    StringBuilder additionalInfo = new StringBuilder();
+                    for (int i = 2; i < stationParts.length; i++) {
+                        additionalInfo.append(stationParts[i]).append(" ");
+                    }
+                    stations.put(stationName, stationLocation + " " + additionalInfo.toString().trim());
                 } else {
-                    checker.add("Invalid station format: " + part);
+                    checker.add("Invalid station format: " + stationContent);
                 }
             }
         } else {
             checker.add("Error: 'STATIONS' pattern not found in the line: " + completeLine);
         }
     }
+
 
     private void parseJobTypes(String line, Scanner fileScanner) {
         while (!line.contains("))")) {
@@ -178,6 +205,7 @@ public class Parser {
 
         Pattern pattern = Pattern.compile("\\(JOBTYPES\\s+(.+)\\)");
         Matcher matcher = pattern.matcher(line);
+
         while (matcher.find()) {
             String jobBlock = matcher.group(1).trim();
             Pattern jobPattern = Pattern.compile("\\(([^)]+)\\)");
@@ -193,11 +221,18 @@ public class Parser {
 
                     for (int i = 1; i < jobParts.length; i++) {
                         String task = jobParts[i];
-                        if (isValidTaskType(task)) {
-                            for (Task T : tasks) {
-                                if (T.getTaskTypeID().equals(task)) {
-                                    jobTasks.add(T);
-                                }
+                        int next = i + 1;
+
+                        // if task matches and next is numeric: .setSize()
+                        if (isValidTaskType(task) && next < jobParts.length && isNumeric(jobParts[next])) {
+                            double size = Double.parseDouble(jobParts[next]);
+                            jobTasks.add(new Task(task, size));
+                            i++; // skip next part as it's used
+                        } else if (isValidTaskType(task)) {
+                            if (taskTypeSizes.containsKey(task)) {
+                                jobTasks.add(new Task(task, taskTypeSizes.get(task)));
+                            } else {
+                                checker.add("Unknown task type: " + task);
                             }
                         } else {
                             checker.add("Invalid task type in job " + jobId + ": " + task);
@@ -226,7 +261,6 @@ public class Parser {
         }
     }
 
-
     private boolean isValidTaskType(String taskType) {
         return taskType.matches("^T\\d+$");
     }
@@ -234,11 +268,9 @@ public class Parser {
     private boolean isNumeric(String str) {
         return str.matches("-?\\d+(\\.\\d+)?");
     }
-    public void printErrors(){
+
+    public void printErrors() {
         checker.printErrors();
     }
-
-
-
 
 }
