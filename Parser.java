@@ -27,6 +27,9 @@ public class Parser {
     public ArrayList<Task> getTasks() {
         return tasks;
     }
+    public Map<String,String> readStations(){
+        return stations;
+    }
 
     public ArrayList<jobTypeID> getJobs() {
         return jobs;
@@ -95,7 +98,13 @@ public class Parser {
                 if (i + 1 < parts.length) {
                     String nextPart = parts[i + 1].trim();
                     if (isNumeric(nextPart)) {
-                        double taskSize = Math.abs(Double.parseDouble(nextPart));
+                        //here
+
+                        double taskSize = Double.parseDouble(nextPart);
+
+                        if(taskSize<=0){
+                            checker.add(parts[i]+" has negative size of: "+taskSize);
+                        }
                         if (isValidTaskType(taskType)) {
                             if (taskTypeSizes.containsKey(taskType)) {
                                 checker.add("Duplicate task type: " + taskType);
@@ -112,7 +121,7 @@ public class Parser {
                             if (taskTypeSizes.containsKey(taskType)) {
                                 checker.add("Duplicate task type: " + taskType);
                             } else {
-                                taskTypeSizes.put(taskType, 1.0); // Default size: 1.0 for valid task type
+                                taskTypeSizes.put(taskType, 0.0); // Default size: 1.0 for valid task type
                                 taskTypeSet.add(taskType);
                             }
                         } else {
@@ -124,7 +133,7 @@ public class Parser {
                         if (taskTypeSizes.containsKey(taskType)) {
                             checker.add("Duplicate task type: " + taskType);
                         } else {
-                            taskTypeSizes.put(taskType, 1.0); // Default size for the last valid task type without a size
+                            taskTypeSizes.put(taskType, 0.0); // Default size for the last valid task type without a size
                             taskTypeSet.add(taskType);
                         }
                     } else {
@@ -141,7 +150,10 @@ public class Parser {
         }
     }
 
+
     //what I need: Arraylist<Task> stationTasks, ArrayList<TaskTypeReeders, then generate objects
+    //method
+
     private void parseStations(String line, Scanner fileScanner) {
         StringBuilder stationsBuilder = new StringBuilder(line);
 
@@ -159,37 +171,99 @@ public class Parser {
         String completeLine = stationsBuilder.toString();
         System.out.println("Complete STATIONS line: " + completeLine);
 
-        Pattern pattern = Pattern.compile("\\(STATIONS\\s+([^)]+)\\)");
-        Matcher matcher = pattern.matcher(completeLine);
+        // Remove the outer (STATIONS and final ))
+        String content = completeLine.substring(completeLine.indexOf("(STATIONS") + 9, completeLine.lastIndexOf("))")).trim();
 
-        if (matcher.find()) {
-            String content = matcher.group(1).trim();
-            Pattern stationPattern = Pattern.compile("\\(([^)]+)\\)");
-            Matcher stationMatcher = stationPattern.matcher(content);
-            System.out.println("Here"+content);
+        // Split individual station entries
+        String[] stationEntries = content.split("\\)\\s*\\(");
+        Set<String> stationNames = new HashSet<>(); // To check for duplicates
 
-            while (stationMatcher.find()) {
-                String stationContent = stationMatcher.group(1).trim();
-                System.out.println(stationContent);
-                String[] stationParts = stationContent.split("\\s+");
+        for (String entry : stationEntries) {
+            entry = entry.replace("(", "").replace(")", "").trim();
+            String[] stationParts = entry.split("\\s+");
 
-                if (stationParts.length >= 2) {
-                    String stationName = stationParts[0].trim();
-                    String stationLocation = stationParts[1].trim();
-                    StringBuilder additionalInfo = new StringBuilder();
-                    for (int i = 2; i < stationParts.length; i++) {
-                        additionalInfo.append(stationParts[i]).append(" ");
+            if (stationParts.length >= 5) { // Ensure minimum parts for a valid station entry
+                String stationName = stationParts[0].trim();
+
+                if (isValidStationName(stationName)) {
+                    if (stationNames.contains(stationName)) {
+                        checker.add("Duplicate station name: " + stationName);
+                    } else {
+                        stationNames.add(stationName);
+
+                        try {
+                            Station station = new Station(stationName);
+                            String stationID = stationParts[0];
+                            int maxCapacity = Integer.parseInt(stationParts[1]);
+                            boolean multiFlag = isY(stationParts[2]);
+                            boolean fifoFlag = isY(stationParts[3]);
+                            double stationSpeed = 0.0;
+
+                            ArrayList<TaskTypeSpeedReeder> taskTypeSpeedReeders = new ArrayList<>();
+                            for (int i = 4; i < stationParts.length; i++) {
+                                if (i < stationParts.length - 1 && isValidTaskType(stationParts[i]) && isNumeric(stationParts[i + 1])) {
+                                    String taskType = stationParts[i];
+                                    double speed = Double.parseDouble(stationParts[i + 1]);
+                                    taskTypeSpeedReeders.add(new TaskTypeSpeedReeder(taskType, speed));
+                                    i++; // Skip the speed part
+                                } else if (isNumeric(stationParts[i])) {
+                                    stationSpeed = Double.parseDouble(stationParts[i]);
+                                } else {
+                                    checker.add("Invalid task type or speed in station entry: " + entry);
+                                    break;
+                                }
+                            }
+
+                            ArrayList<Task> tasksForStation = new ArrayList<>();
+                            for (TaskTypeSpeedReeder t : taskTypeSpeedReeders) {
+                                for (Task task : tasks) {
+                                    if (task.getTaskTypeID().equals(t.getTaskTypeID())) {
+                                        tasksForStation.add(task);
+                                    }
+                                }
+                            }
+
+                            station.setStationID(stationID);
+                            station.setMaxCapacity(maxCapacity);
+                            station.setMultiFlag(multiFlag);
+                            station.setFifoFlag(fifoFlag);
+                            station.setStationSpeed(stationSpeed);
+                            station.setTaskTypeSpeedReeders(taskTypeSpeedReeders);
+                            station.setTasksForStations(tasksForStation);
+
+                            Stations.add(station);
+                        } catch (Exception e) {
+                            checker.add("Error parsing station entry: " + entry);
+                        }
                     }
-                    stations.put(stationName, stationLocation + " " + additionalInfo.toString().trim());
                 } else {
-                    checker.add("Invalid station format: " + stationContent);
+                    checker.add("Invalid station name: " + stationName);
                 }
+            } else {
+                checker.add("Invalid station format: " + entry);
             }
-        } else {
-            checker.add("Error: 'STATIONS' pattern not found in the line: " + completeLine);
         }
     }
 
+
+    // Utility methods for checking numeric and 'Y'/'N' values
+    private boolean isNumeric(String str) {
+        return str != null && str.matches("-?\\d+(\\.\\d+)?");
+    }
+
+    private boolean isYorN(String str) {
+        return str != null && (str.equalsIgnoreCase("Y") || str.equalsIgnoreCase("N"));
+    }
+
+    private boolean isY(String part) {
+        return part.equalsIgnoreCase("Y");
+    }
+
+    private boolean isValidStationName(String stationName) {
+        return stationName.matches("^S\\d+$");
+    }
+
+    // Method to validate station info
 
     private void parseJobTypes(String line, Scanner fileScanner) {
         while (!line.contains("))")) {
@@ -265,9 +339,7 @@ public class Parser {
         return taskType.matches("^T\\d+$");
     }
 
-    private boolean isNumeric(String str) {
-        return str.matches("-?\\d+(\\.\\d+)?");
-    }
+
 
     public void printErrors() {
         checker.printErrors();
